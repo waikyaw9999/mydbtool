@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { ObjectTree } from "@/components/ObjectTree";
 import { ResultGrid } from "@/components/ResultGrid";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/client/api";
 import { ENGINE_LABELS, type PublicConnection } from "@/lib/connections/types";
 import { DEFAULT_RESULT_LIMIT } from "@/lib/db/query-safety";
@@ -385,9 +386,12 @@ export function Workspace() {
             <p>Mongo · Postgres · MySQL · SQL Server</p>
           </div>
         </div>
-        <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
-          New connection
-        </button>
+        <div className="header-actions">
+          <ThemeToggle />
+          <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
+            New connection
+          </button>
+        </div>
       </header>
 
       <aside className="sidebar">
@@ -649,7 +653,7 @@ function EditorPane({
 
   return (
     <div className="editor-pane">
-      <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div className="editor-stack">
         {tab.kind === "sql" ? (
           <>
             <div className="editor-toolbar">
@@ -760,30 +764,32 @@ function EditorPane({
         ) : null}
       </div>
 
-      {tab.error ? <div className="banner err">{tab.error}</div> : null}
-      {tab.result ? (
-        <ResultGrid
-          result={tab.result}
-          view={tab.kind === "sql" ? "table" : tab.view}
-          onViewChange={
-            tab.kind === "sql"
-              ? undefined
-              : (view) => onChange(tab.id, { view })
-          }
-          loadingMore={tab.running}
-          onLoadMore={
-            tab.kind === "preview"
-              ? () => onLoadMorePreview(tab)
-              : tab.kind === "mongo"
-                ? () => onLoadMoreMongo(tab)
-                : undefined
-          }
-        />
-      ) : tab.kind !== "preview" && !tab.error ? (
-        <div className="empty">
-          <p>Run a statement to see results here.</p>
-        </div>
-      ) : null}
+      <div className="result-stack">
+        {tab.error ? <div className="banner err">{tab.error}</div> : null}
+        {tab.result ? (
+          <ResultGrid
+            result={tab.result}
+            view={tab.kind === "sql" ? "table" : tab.view}
+            onViewChange={
+              tab.kind === "sql"
+                ? undefined
+                : (view) => onChange(tab.id, { view })
+            }
+            loadingMore={tab.running}
+            onLoadMore={
+              tab.kind === "preview"
+                ? () => onLoadMorePreview(tab)
+                : tab.kind === "mongo"
+                  ? () => onLoadMoreMongo(tab)
+                  : undefined
+            }
+          />
+        ) : tab.kind !== "preview" && !tab.error ? (
+          <div className="empty">
+            <p>Run a statement to see results here.</p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

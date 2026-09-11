@@ -69,6 +69,7 @@ Then create connections against `localhost` with:
 3. Click a table or collection to preview the first 100 rows (load more if truncated). Column/field types appear when the engine provides them.
 4. Open a query tab. SQL uses the editor + **Run** or **Ctrl/Cmd+Enter**. Statements run against the **active database** shown in the toolbar (`host · database`), defaulting to the saved connection database. Expanding another database in the object tree, opening a table preview, or using the toolbar selector (when several catalogs are listed) points SQL at that catalog so unqualified names match the tables you are browsing. Mongo already sends an explicit database on the find/aggregate tab.
 5. Results show in a grid (and JSON for Mongo/preview). Row counts are capped (default 100, max 500).
+6. Use **Dark / Light** in the header to switch theme. The choice is saved in `localStorage`. On a first visit, the workbench follows `prefers-color-scheme`.
 
 ## Architecture
 
