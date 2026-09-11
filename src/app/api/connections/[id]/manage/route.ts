@@ -10,7 +10,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const { id } = await ctx.params;
     const conn = await resolveConnection(id);
-    const parsed = parseManageRequest(await readJson(req));
+    const parsed = parseManageRequest(await readJson(req), conn.engine);
     const result = await runManage(conn, parsed);
     return jsonOk(result);
   } catch (err) {

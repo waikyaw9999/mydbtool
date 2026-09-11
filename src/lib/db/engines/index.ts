@@ -5,12 +5,20 @@ import { sanitizeError } from "@/lib/db/serialize";
 import { resolveQueryDatabase } from "@/lib/db/sql-database";
 import {
   buildAddColumnSql,
+  buildCreateDatabaseSql,
   buildCreateTableSql,
   buildDropColumnSql,
+  buildDropDatabaseSql,
   buildDropTableSql,
+  buildRenameDatabaseSql,
   buildRenameTableSql,
+  DEFAULT_MONGO_INIT_COLLECTION,
+  assertDroppableDatabase,
+  assertMutableCatalog,
   defaultSchemaFor,
   isDestructiveManageAction,
+  maintenanceDatabaseFor,
+  supportsRenameDatabase,
   type ManageRequest,
 } from "@/lib/db/ddl";
 import type {
@@ -23,7 +31,9 @@ import type {
 } from "@/lib/db/types";
 import {
   createMongoCollection,
+  createMongoDatabase,
   dropMongoCollection,
+  dropMongoDatabase,
   listMongoObjects,
   previewMongo,
   queryMongo,
@@ -169,6 +179,19 @@ export async function runManage(
   if (conn.engine === "mongo") {
     const database = req.database || conn.database;
     if (!database) throw new Error("Database is required.");
+    if (req.action === "createDatabase") {
+      const collection = req.collection || DEFAULT_MONGO_INIT_COLLECTION;
+      await createMongoDatabase(conn, database, collection);
+      return { message: `Created database ${database} (collection ${collection}).` };
+    }
+    if (req.action === "dropDatabase") {
+      assertDroppableDatabase("mongo", database, conn.database);
+      await dropMongoDatabase(conn, database);
+      return { message: `Dropped database ${database}.` };
+    }
+    if (req.action === "renameDatabase") {
+      throw new Error("MongoDB does not support renaming databases. Create a new one and copy collections if needed.");
+    }
     if (!req.collection && req.action !== "createCollection") {
       throw new Error("Collection name is required.");
     }
@@ -187,6 +210,34 @@ export async function runManage(
       return { message: `Renamed collection to ${req.newName}.` };
     }
     throw new Error("That action is not available on MongoDB connections.");
+  }
+
+  if (req.action === "createDatabase") {
+    if (!req.database) throw new Error("Database name is required.");
+    const sql = buildCreateDatabaseSql(conn.engine, req.database);
+    const maintenance = maintenanceDatabaseFor(conn.engine, req.database, conn.database);
+    await runSql(conn, sql, 1, maintenance);
+    return { message: `Created database ${req.database}.` };
+  }
+  if (req.action === "dropDatabase") {
+    if (!req.database) throw new Error("Database name is required.");
+    assertDroppableDatabase(conn.engine, req.database, conn.database);
+    const sql = buildDropDatabaseSql(conn.engine, req.database);
+    const maintenance = maintenanceDatabaseFor(conn.engine, req.database, conn.database);
+    await runSql(conn, sql, 1, maintenance);
+    return { message: `Dropped database ${req.database}.` };
+  }
+  if (req.action === "renameDatabase") {
+    if (!req.database) throw new Error("Database name is required.");
+    if (!req.newName) throw new Error("New database name is required.");
+    if (!supportsRenameDatabase(conn.engine)) {
+      throw new Error("This engine does not support renaming databases.");
+    }
+    assertMutableCatalog(conn.engine, req.database, conn.database, "rename");
+    const sql = buildRenameDatabaseSql(conn.engine, req.database, req.newName);
+    const maintenance = maintenanceDatabaseFor(conn.engine, req.database, conn.database);
+    await runSql(conn, sql, 1, maintenance);
+    return { message: `Renamed database to ${req.newName}.` };
   }
 
   const database = req.database || conn.database;

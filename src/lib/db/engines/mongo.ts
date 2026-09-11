@@ -213,6 +213,26 @@ export async function queryMongo(
   });
 }
 
+export async function createMongoDatabase(
+  conn: ResolvedConnection,
+  database: string,
+  collection: string,
+): Promise<void> {
+  assertSafeMongoIdent(database, "database");
+  assertSafeMongoIdent(collection, "collection");
+  await withClient(conn, async (client) => {
+    await client.db(database).createCollection(collection);
+  });
+}
+
+export async function dropMongoDatabase(conn: ResolvedConnection, database: string): Promise<void> {
+  assertSafeMongoIdent(database, "database");
+  await withClient(conn, async (client) => {
+    const result = await client.db(database).dropDatabase();
+    if (!result) throw new Error(`Database “${database}” was not dropped.`);
+  });
+}
+
 export async function createMongoCollection(
   conn: ResolvedConnection,
   database: string,

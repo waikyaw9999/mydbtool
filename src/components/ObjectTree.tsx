@@ -3,6 +3,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 
 import type { Engine } from "@/lib/connections/types";
+import { supportsRenameDatabase } from "@/lib/db/ddl";
 import type { SchemaNode } from "@/lib/db/types";
 
 export type TreePath = {
@@ -22,7 +23,10 @@ export type ObjectMenuAction =
   | "dropColumn"
   | "createCollection"
   | "dropCollection"
-  | "renameCollection";
+  | "renameCollection"
+  | "createDatabase"
+  | "dropDatabase"
+  | "renameDatabase";
 
 type MenuItem = {
   id: ObjectMenuAction;
@@ -134,7 +138,12 @@ export function ObjectTree({
 
 function menuItemsFor(engine: Engine, path: TreePath): MenuItem[] {
   if (engine === "mongo") {
-    if (path.kind === "database") return [{ id: "createCollection", label: "New collection" }];
+    if (path.kind === "database") {
+      return [
+        { id: "createCollection", label: "New collection" },
+        { id: "dropDatabase", label: "Drop database", danger: true },
+      ];
+    }
     if (path.kind === "collection") {
       return [
         { id: "renameCollection", label: "Rename collection" },
@@ -143,7 +152,15 @@ function menuItemsFor(engine: Engine, path: TreePath): MenuItem[] {
     }
     return [];
   }
-  if (path.kind === "database" || path.kind === "schema") {
+  if (path.kind === "database") {
+    const items: MenuItem[] = [{ id: "createTable", label: "New table" }];
+    if (supportsRenameDatabase(engine)) {
+      items.push({ id: "renameDatabase", label: "Rename database" });
+    }
+    items.push({ id: "dropDatabase", label: "Drop database", danger: true });
+    return items;
+  }
+  if (path.kind === "schema") {
     return [{ id: "createTable", label: "New table" }];
   }
   if (path.kind === "table") {

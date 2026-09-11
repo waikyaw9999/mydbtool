@@ -4,6 +4,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 
 import type { Engine } from "@/lib/connections/types";
 import {
+  DEFAULT_MONGO_INIT_COLLECTION,
   SQL_COLUMN_TYPES,
   SQL_TYPE_LABELS,
   defaultSchemaFor,
@@ -13,6 +14,8 @@ import {
 } from "@/lib/db/ddl";
 
 export type ManageDialogState =
+  | { type: "createDatabase" }
+  | { type: "renameDatabase"; database: string }
   | { type: "createTable"; database?: string; schema?: string }
   | { type: "createCollection"; database?: string }
   | { type: "renameTable"; database?: string; schema?: string; table: string }
@@ -34,6 +37,35 @@ function emptyColumn(): ColumnInput {
 }
 
 export function ObjectManageDialog({ engine, state, busy, error, onClose, onSubmit }: Props) {
+  if (state.type === "createDatabase") {
+    return (
+      <CreateDatabaseForm
+        engine={engine}
+        busy={busy}
+        error={error}
+        onClose={onClose}
+        onSubmit={onSubmit}
+      />
+    );
+  }
+  if (state.type === "renameDatabase") {
+    return (
+      <RenameForm
+        title={`Rename database ${state.database}`}
+        current={state.database}
+        busy={busy}
+        error={error}
+        onClose={onClose}
+        onSubmit={(newName) =>
+          onSubmit({
+            action: "renameDatabase",
+            database: state.database,
+            newName,
+          })
+        }
+      />
+    );
+  }
   if (state.type === "createTable") {
     return (
       <CreateTableForm
@@ -137,6 +169,63 @@ export function ObjectManageDialog({ engine, state, busy, error, onClose, onSubm
         })
       }
     />
+  );
+}
+
+function CreateDatabaseForm({
+  engine,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  engine: Engine;
+  busy?: boolean;
+  error?: string | null;
+  onClose: () => void;
+  onSubmit: (body: ManageRequest) => void;
+}) {
+  const [name, setName] = useState("");
+  const [collection, setCollection] = useState("");
+  const note =
+    engine === "mongo"
+      ? "MongoDB only persists a database after it has a collection. We’ll create the first collection you name (or _init if you leave it blank)."
+      : engine === "postgres"
+        ? "Creates an empty catalog with default encoding. Postgres cannot drop the database this connection opens — the server runs CREATE/DROP against postgres (or template1)."
+        : engine === "mssql"
+          ? "Created via master. You cannot drop the database this connection currently opens until you point it at another catalog."
+          : "Creates a schema. MySQL does not support renaming databases.";
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    onSubmit({
+      action: "createDatabase",
+      database: name,
+      collection: engine === "mongo" ? collection || DEFAULT_MONGO_INIT_COLLECTION : undefined,
+    });
+  }
+
+  return (
+    <DialogShell title="New database" onClose={onClose} onSubmit={submit} busy={busy} error={error} confirmLabel="Create database">
+      <p className="dialog-note">{note}</p>
+      <div className="form-grid">
+        <Field label="Database name">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        </Field>
+        {engine === "mongo" ? (
+          <Field label="First collection (optional)">
+            <input
+              className="input"
+              value={collection}
+              onChange={(e) => setCollection(e.target.value)}
+              placeholder={DEFAULT_MONGO_INIT_COLLECTION}
+            />
+          </Field>
+        ) : (
+          <div />
+        )}
+      </div>
+    </DialogShell>
   );
 }
 

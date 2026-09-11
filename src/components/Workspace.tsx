@@ -79,6 +79,8 @@ export function Workspace() {
     message: string;
     danger?: boolean;
     confirmLabel?: string;
+    typedValue?: string;
+    typedLabel?: string;
     action: () => void;
   }>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -355,7 +357,42 @@ export function Workspace() {
     });
   }
 
-  async function refreshObjectsAfterManage(connectionId: string, engine: PublicConnection["engine"], database?: string) {
+  async function refreshObjectsAfterManage(
+    connectionId: string,
+    engine: PublicConnection["engine"],
+    body: ManageRequest,
+  ) {
+    if (body.action === "createDatabase" && body.database) {
+      setConnectionSqlDatabase(connectionId, body.database);
+      await loadTree(connectionId);
+      if (engine === "postgres" || engine === "mssql") {
+        await loadTree(connectionId, body.database);
+      }
+      return;
+    }
+    if (body.action === "dropDatabase" && body.database) {
+      const conn = connections.find((item) => item.id === connectionId);
+      const fallback = conn?.database && conn.database !== body.database ? conn.database : "";
+      if (fallback) setConnectionSqlDatabase(connectionId, fallback);
+      else {
+        setSqlDatabaseByConn((prev) => {
+          const next = { ...prev };
+          delete next[connectionId];
+          return next;
+        });
+      }
+      await loadTree(connectionId);
+      return;
+    }
+    if (body.action === "renameDatabase" && body.database && body.newName) {
+      setConnectionSqlDatabase(connectionId, body.newName);
+      await loadTree(connectionId);
+      if (engine === "postgres" || engine === "mssql") {
+        await loadTree(connectionId, body.newName);
+      }
+      return;
+    }
+    const database = body.database || selectedSqlDatabase;
     if ((engine === "postgres" || engine === "mssql") && database) {
       await loadTree(connectionId, database);
       return;
@@ -393,7 +430,27 @@ export function Workspace() {
             (tab.target.database || "") === (body.database || ""),
         );
       }
-      await refreshObjectsAfterManage(conn.id, conn.engine, body.database || selectedSqlDatabase);
+      if (body.action === "dropDatabase" || body.action === "renameDatabase") {
+        closePreviewTabs(
+          (tab) => tab.connectionId === conn.id && (tab.target.database || "") === (body.database || ""),
+        );
+        setTabs((prev) =>
+          prev.map((tab) => {
+            if (tab.connectionId !== conn.id) return tab;
+            if (tab.kind === "sql" && tab.database === body.database) {
+              return { ...tab, database: body.action === "renameDatabase" ? body.newName || tab.database : conn.database };
+            }
+            if (tab.kind === "mongo" && tab.database === body.database) {
+              return {
+                ...tab,
+                database: body.action === "renameDatabase" ? body.newName || tab.database : conn.database,
+              };
+            }
+            return tab;
+          }),
+        );
+      }
+      await refreshObjectsAfterManage(conn.id, conn.engine, body);
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Object action failed.";
@@ -424,6 +481,12 @@ export function Workspace() {
     });
   }
 
+  function openCreateDatabaseDialog() {
+    if (!selected || selected.readOnly) return;
+    setManageError(null);
+    setManageDialog({ type: "createDatabase" });
+  }
+
   function handleObjectAction(action: ObjectMenuAction, path: TreePath) {
     if (!selected || selected.readOnly) return;
     const database = path.database || selectedSqlDatabase || undefined;
@@ -435,6 +498,43 @@ export function Workspace() {
     }
     if (action === "createCollection") {
       openCreateCollectionDialog(path.database || database);
+      return;
+    }
+    if (action === "createDatabase") {
+      openCreateDatabaseDialog();
+      return;
+    }
+    if (action === "renameDatabase" && path.database) {
+      setManageError(null);
+      setManageDialog({ type: "renameDatabase", database: path.database });
+      return;
+    }
+    if (action === "dropDatabase" && path.database) {
+      const engineNote =
+        selected.engine === "postgres"
+          ? " Postgres cannot drop the database this connection is using; the server runs DROP against postgres (or template1)."
+          : selected.engine === "mssql"
+            ? " SQL Server cannot drop the database this connection currently opens."
+            : selected.engine === "mongo"
+              ? " This calls dropDatabase and removes every collection in it."
+              : "";
+      setConfirm({
+        title: "Drop database",
+        message: `Drop database “${path.database}” and everything inside it? This cannot be undone.${engineNote}`,
+        danger: true,
+        confirmLabel: "Drop database",
+        typedValue: path.database,
+        typedLabel: `Type ${path.database} to confirm`,
+        action: () => {
+          setConfirm(null);
+          void runManageAction({
+            action: "dropDatabase",
+            database: path.database,
+            confirmDestructive: true,
+            confirmName: path.database,
+          });
+        },
+      });
       return;
     }
     if (action === "renameTable" && path.table) {
@@ -612,17 +712,22 @@ export function Workspace() {
         </div>
         <div className="sidebar-section">
           <span>Objects</span>
-          <span style={{ display: "flex", gap: 4, textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
+            <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
             {selected && !selected.readOnly ? (
-              <button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() =>
-                  selected.engine === "mongo" ? openCreateCollectionDialog() : openCreateTableDialog()
-                }
-              >
-                {selected.engine === "mongo" ? "New collection" : "New table"}
-              </button>
+              <>
+                <button className="btn btn-ghost" type="button" onClick={() => openCreateDatabaseDialog()}>
+                  New database
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={() =>
+                    selected.engine === "mongo" ? openCreateCollectionDialog() : openCreateTableDialog()
+                  }
+                >
+                  {selected.engine === "mongo" ? "New collection" : "New table"}
+                </button>
+              </>
             ) : null}
             {selected ? (
               <button className="btn btn-ghost" type="button" onClick={() => void loadTree(selected.id)}>
@@ -809,6 +914,8 @@ export function Workspace() {
           message={confirm.message}
           danger={confirm.danger}
           confirmLabel={confirm.confirmLabel}
+          typedValue={confirm.typedValue}
+          typedLabel={confirm.typedLabel}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void confirm.action()}
         />
