@@ -649,7 +649,7 @@ function EditorPane({
 
   return (
     <div className="editor-pane">
-      <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div className="editor-stack">
         {tab.kind === "sql" ? (
           <>
             <div className="editor-toolbar">
@@ -760,30 +760,32 @@ function EditorPane({
         ) : null}
       </div>
 
-      {tab.error ? <div className="banner err">{tab.error}</div> : null}
-      {tab.result ? (
-        <ResultGrid
-          result={tab.result}
-          view={tab.kind === "sql" ? "table" : tab.view}
-          onViewChange={
-            tab.kind === "sql"
-              ? undefined
-              : (view) => onChange(tab.id, { view })
-          }
-          loadingMore={tab.running}
-          onLoadMore={
-            tab.kind === "preview"
-              ? () => onLoadMorePreview(tab)
-              : tab.kind === "mongo"
-                ? () => onLoadMoreMongo(tab)
-                : undefined
-          }
-        />
-      ) : tab.kind !== "preview" && !tab.error ? (
-        <div className="empty">
-          <p>Run a statement to see results here.</p>
-        </div>
-      ) : null}
+      <div className="result-stack">
+        {tab.error ? <div className="banner err">{tab.error}</div> : null}
+        {tab.result ? (
+          <ResultGrid
+            result={tab.result}
+            view={tab.kind === "sql" ? "table" : tab.view}
+            onViewChange={
+              tab.kind === "sql"
+                ? undefined
+                : (view) => onChange(tab.id, { view })
+            }
+            loadingMore={tab.running}
+            onLoadMore={
+              tab.kind === "preview"
+                ? () => onLoadMorePreview(tab)
+                : tab.kind === "mongo"
+                  ? () => onLoadMoreMongo(tab)
+                  : undefined
+            }
+          />
+        ) : tab.kind !== "preview" && !tab.error ? (
+          <div className="empty">
+            <p>Run a statement to see results here.</p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
