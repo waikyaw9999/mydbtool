@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
-import { ObjectTree } from "@/components/ObjectTree";
+import { ObjectManageDialog, type ManageDialogState } from "@/components/ObjectDialogs";
+import { ObjectTree, type ObjectMenuAction, type TreePath } from "@/components/ObjectTree";
 import { ResultGrid } from "@/components/ResultGrid";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/client/api";
 import { ENGINE_LABELS, type PublicConnection } from "@/lib/connections/types";
+import { defaultSchemaFor, type ManageRequest } from "@/lib/db/ddl";
 import { DEFAULT_RESULT_LIMIT } from "@/lib/db/query-safety";
 import { listSqlDatabases } from "@/lib/db/sql-database";
 import type { PreviewTarget, QueryResult, QueryResponse, SchemaNode } from "@/lib/db/types";
@@ -81,6 +83,10 @@ export function Workspace() {
   }>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sqlDatabaseByConn, setSqlDatabaseByConn] = useState<Record<string, string>>({});
+  const [manageDialog, setManageDialog] = useState<ManageDialogState | null>(null);
+  const [manageBusy, setManageBusy] = useState(false);
+  const [manageError, setManageError] = useState<string | null>(null);
+  const [manageNotice, setManageNotice] = useState<string | null>(null);
 
   const selected = connections.find((item) => item.id === selectedId) ?? null;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
@@ -339,6 +345,159 @@ export function Workspace() {
     });
   }
 
+  function closePreviewTabs(match: (tab: PreviewTab) => boolean) {
+    setTabs((prev) => {
+      const next = prev.filter((tab) => !(tab.kind === "preview" && match(tab)));
+      if (activeTabId && !next.some((tab) => tab.id === activeTabId)) {
+        setActiveTabId(next.at(-1)?.id ?? null);
+      }
+      return next;
+    });
+  }
+
+  async function refreshObjectsAfterManage(connectionId: string, engine: PublicConnection["engine"], database?: string) {
+    if ((engine === "postgres" || engine === "mssql") && database) {
+      await loadTree(connectionId, database);
+      return;
+    }
+    await loadTree(connectionId);
+  }
+
+  async function runManageAction(body: ManageRequest): Promise<boolean> {
+    const conn = selected;
+    if (!conn || manageBusy) return false;
+    setManageBusy(true);
+    setManageError(null);
+    try {
+      const res = await api<{ message: string }>(`/api/connections/${conn.id}/manage`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setManageNotice(res.message);
+      setManageDialog(null);
+      setTreeError(null);
+      if (body.action === "dropTable" || body.action === "renameTable") {
+        closePreviewTabs(
+          (tab) =>
+            tab.connectionId === conn.id &&
+            tab.target.table === body.table &&
+            (tab.target.schema || "") === (body.schema || "") &&
+            (tab.target.database || "") === (body.database || ""),
+        );
+      }
+      if (body.action === "dropCollection" || body.action === "renameCollection") {
+        closePreviewTabs(
+          (tab) =>
+            tab.connectionId === conn.id &&
+            tab.target.collection === body.collection &&
+            (tab.target.database || "") === (body.database || ""),
+        );
+      }
+      await refreshObjectsAfterManage(conn.id, conn.engine, body.database || selectedSqlDatabase);
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Object action failed.";
+      setManageError(message);
+      if (!manageDialog) setTreeError(message);
+      return false;
+    } finally {
+      setManageBusy(false);
+    }
+  }
+
+  function openCreateTableDialog(database?: string, schema?: string) {
+    if (!selected || selected.readOnly) return;
+    setManageError(null);
+    setManageDialog({
+      type: "createTable",
+      database: database || selectedSqlDatabase || undefined,
+      schema: schema || defaultSchemaFor(selected.engine),
+    });
+  }
+
+  function openCreateCollectionDialog(database?: string) {
+    if (!selected || selected.readOnly) return;
+    setManageError(null);
+    setManageDialog({
+      type: "createCollection",
+      database: database || selectedSqlDatabase || selected.database || undefined,
+    });
+  }
+
+  function handleObjectAction(action: ObjectMenuAction, path: TreePath) {
+    if (!selected || selected.readOnly) return;
+    const database = path.database || selectedSqlDatabase || undefined;
+    const schema = path.schema || defaultSchemaFor(selected.engine);
+
+    if (action === "createTable") {
+      openCreateTableDialog(database, path.kind === "schema" ? path.schema : schema);
+      return;
+    }
+    if (action === "createCollection") {
+      openCreateCollectionDialog(path.database || database);
+      return;
+    }
+    if (action === "renameTable" && path.table) {
+      setManageError(null);
+      setManageDialog({ type: "renameTable", database, schema, table: path.table });
+      return;
+    }
+    if (action === "renameCollection" && path.collection) {
+      setManageError(null);
+      setManageDialog({ type: "renameCollection", database, collection: path.collection });
+      return;
+    }
+    if (action === "addColumn" && path.table) {
+      setManageError(null);
+      setManageDialog({ type: "addColumn", database, schema, table: path.table });
+      return;
+    }
+    if (action === "dropColumn" && path.table) {
+      setManageError(null);
+      setManageDialog({ type: "dropColumn", database, schema, table: path.table });
+      return;
+    }
+    if (action === "dropTable" && path.table) {
+      const kind = path.kind === "view" ? "view" : "table";
+      const qualified = `${schema ? `${schema}.` : ""}${path.table}`;
+      setConfirm({
+        title: `Drop ${kind}`,
+        message: `Drop ${kind} “${qualified}”? This cannot be undone.`,
+        danger: true,
+        confirmLabel: kind === "view" ? "Drop view" : "Drop table",
+        action: () => {
+          setConfirm(null);
+          void runManageAction({
+            action: "dropTable",
+            database,
+            schema,
+            table: path.table,
+            kind,
+            confirmDestructive: true,
+          });
+        },
+      });
+      return;
+    }
+    if (action === "dropCollection" && path.collection) {
+      setConfirm({
+        title: "Drop collection",
+        message: `Drop collection “${database ? `${database}.` : ""}${path.collection}”? This cannot be undone.`,
+        danger: true,
+        confirmLabel: "Drop collection",
+        action: () => {
+          setConfirm(null);
+          void runManageAction({
+            action: "dropCollection",
+            database,
+            collection: path.collection,
+            confirmDestructive: true,
+          });
+        },
+      });
+    }
+  }
+
   async function removeConnection(conn: PublicConnection) {
     setConfirm({
       title: "Delete connection",
@@ -365,7 +524,9 @@ export function Workspace() {
 
   const status = useMemo(() => {
     if (activeTab?.running) return "Running…";
+    if (manageBusy) return "Updating objects…";
     if (activeTab?.error) return activeTab.error;
+    if (manageNotice) return manageNotice;
     if (activeTab?.result) {
       return `${activeTab.result.rows.length} rows in ${activeTab.result.durationMs} ms`;
     }
@@ -374,7 +535,7 @@ export function Workspace() {
       return `${ENGINE_LABELS[selected.engine]} · ${selected.host}:${selected.port}${db ? ` / ${db}` : ""}`;
     }
     return "Ready";
-  }, [activeTab, selected, sqlDatabaseByConn]);
+  }, [activeTab, selected, sqlDatabaseByConn, manageBusy, manageNotice]);
 
   return (
     <div className="app-shell">
@@ -451,11 +612,24 @@ export function Workspace() {
         </div>
         <div className="sidebar-section">
           <span>Objects</span>
-          {selected ? (
-            <button className="btn btn-ghost" type="button" onClick={() => void loadTree(selected.id)}>
-              Refresh
-            </button>
-          ) : null}
+          <span style={{ display: "flex", gap: 4, textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
+            {selected && !selected.readOnly ? (
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() =>
+                  selected.engine === "mongo" ? openCreateCollectionDialog() : openCreateTableDialog()
+                }
+              >
+                {selected.engine === "mongo" ? "New collection" : "New table"}
+              </button>
+            ) : null}
+            {selected ? (
+              <button className="btn btn-ghost" type="button" onClick={() => void loadTree(selected.id)}>
+                Refresh
+              </button>
+            ) : null}
+          </span>
         </div>
         <div className="tree-wrap">
           {!selected ? (
@@ -467,7 +641,10 @@ export function Workspace() {
           ) : tree ? (
             <ObjectTree
               nodes={tree}
+              engine={selected.engine}
+              readOnly={selected.readOnly}
               activeDatabase={selectedSqlDatabase}
+              onAction={handleObjectAction}
               onSelectDatabase={(name) => setConnectionSqlDatabase(selected.id, name)}
               onExpandDatabase={(name) => {
                 setConnectionSqlDatabase(selected.id, name);
@@ -608,6 +785,21 @@ export function Workspace() {
             );
             void loadTree(conn.id);
           }}
+        />
+      ) : null}
+
+      {manageDialog && selected ? (
+        <ObjectManageDialog
+          engine={selected.engine}
+          state={manageDialog}
+          busy={manageBusy}
+          error={manageError}
+          onClose={() => {
+            if (manageBusy) return;
+            setManageDialog(null);
+            setManageError(null);
+          }}
+          onSubmit={(body) => void runManageAction(body)}
         />
       ) : null}
 

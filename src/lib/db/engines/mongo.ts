@@ -212,3 +212,42 @@ export async function queryMongo(
     };
   });
 }
+
+export async function createMongoCollection(
+  conn: ResolvedConnection,
+  database: string,
+  collection: string,
+): Promise<void> {
+  assertSafeMongoIdent(database, "database");
+  assertSafeMongoIdent(collection, "collection");
+  await withClient(conn, async (client) => {
+    await client.db(database).createCollection(collection);
+  });
+}
+
+export async function dropMongoCollection(
+  conn: ResolvedConnection,
+  database: string,
+  collection: string,
+): Promise<void> {
+  assertSafeMongoIdent(database, "database");
+  assertSafeMongoIdent(collection, "collection");
+  await withClient(conn, async (client) => {
+    const dropped = await client.db(database).dropCollection(collection);
+    if (!dropped) throw new Error(`Collection “${collection}” was not dropped.`);
+  });
+}
+
+export async function renameMongoCollection(
+  conn: ResolvedConnection,
+  database: string,
+  collection: string,
+  newName: string,
+): Promise<void> {
+  assertSafeMongoIdent(database, "database");
+  assertSafeMongoIdent(collection, "collection");
+  assertSafeMongoIdent(newName, "new name");
+  await withClient(conn, async (client) => {
+    await client.db(database).collection(collection).rename(newName);
+  });
+}

@@ -3,6 +3,16 @@ import "server-only";
 import type { ResolvedConnection } from "@/lib/connections/types";
 import { sanitizeError } from "@/lib/db/serialize";
 import { resolveQueryDatabase } from "@/lib/db/sql-database";
+import {
+  buildAddColumnSql,
+  buildCreateTableSql,
+  buildDropColumnSql,
+  buildDropTableSql,
+  buildRenameTableSql,
+  defaultSchemaFor,
+  isDestructiveManageAction,
+  type ManageRequest,
+} from "@/lib/db/ddl";
 import type {
   ColumnMeta,
   MongoQueryBody,
@@ -12,9 +22,12 @@ import type {
   TestResult,
 } from "@/lib/db/types";
 import {
+  createMongoCollection,
+  dropMongoCollection,
   listMongoObjects,
   previewMongo,
   queryMongo,
+  renameMongoCollection,
   testMongo,
 } from "./mongo";
 import {
@@ -140,4 +153,76 @@ export async function describeColumns(
     case "mongo":
       return [];
   }
+}
+
+export async function runManage(
+  conn: ResolvedConnection,
+  req: ManageRequest,
+): Promise<{ message: string }> {
+  if (conn.readOnly) {
+    throw new Error("Connection is read-only. Object changes are blocked.");
+  }
+  if (isDestructiveManageAction(req.action) && !req.confirmDestructive) {
+    throw new Error("Confirm this destructive action to continue.");
+  }
+
+  if (conn.engine === "mongo") {
+    const database = req.database || conn.database;
+    if (!database) throw new Error("Database is required.");
+    if (!req.collection && req.action !== "createCollection") {
+      throw new Error("Collection name is required.");
+    }
+    if (req.action === "createCollection") {
+      if (!req.collection) throw new Error("Collection name is required.");
+      await createMongoCollection(conn, database, req.collection);
+      return { message: `Created collection ${database}.${req.collection}.` };
+    }
+    if (req.action === "dropCollection") {
+      await dropMongoCollection(conn, database, req.collection!);
+      return { message: `Dropped collection ${database}.${req.collection}.` };
+    }
+    if (req.action === "renameCollection") {
+      if (!req.newName) throw new Error("New collection name is required.");
+      await renameMongoCollection(conn, database, req.collection!, req.newName);
+      return { message: `Renamed collection to ${req.newName}.` };
+    }
+    throw new Error("That action is not available on MongoDB connections.");
+  }
+
+  const database = req.database || conn.database;
+  const withDefaults: ManageRequest = {
+    ...req,
+    database,
+    schema: req.schema || defaultSchemaFor(conn.engine),
+  };
+
+  let sql: string;
+  let message: string;
+  switch (req.action) {
+    case "createTable":
+      sql = buildCreateTableSql(conn.engine, withDefaults);
+      message = `Created table ${withDefaults.schema ? `${withDefaults.schema}.` : ""}${req.table}.`;
+      break;
+    case "dropTable":
+      sql = buildDropTableSql(conn.engine, withDefaults);
+      message = `Dropped ${req.kind === "view" ? "view" : "table"} ${req.table}.`;
+      break;
+    case "renameTable":
+      sql = buildRenameTableSql(conn.engine, withDefaults);
+      message = `Renamed table to ${req.newName}.`;
+      break;
+    case "addColumn":
+      sql = buildAddColumnSql(conn.engine, withDefaults);
+      message = `Added column ${req.column?.name}.`;
+      break;
+    case "dropColumn":
+      sql = buildDropColumnSql(conn.engine, withDefaults);
+      message = `Dropped column ${req.columnName}.`;
+      break;
+    default:
+      throw new Error("That action is not available on SQL connections.");
+  }
+
+  await runSql(conn, sql, 1, database);
+  return { message };
 }
