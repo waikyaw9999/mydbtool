@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ResolvedConnection } from "@/lib/connections/types";
 import { sanitizeError } from "@/lib/db/serialize";
+import { resolveQueryDatabase } from "@/lib/db/sql-database";
 import {
   buildAddColumnSql,
   buildCreateTableSql,
