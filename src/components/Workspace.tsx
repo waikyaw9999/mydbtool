@@ -495,14 +495,28 @@ export function Workspace() {
         {!activeTab ? (
           <div className="empty">
             <div className="brand-mark" style={{ margin: "0 auto" }}>db</div>
-            <h2>Workbench is ready</h2>
+            <h2>{connections.length ? "Open a query or preview" : "Workbench is ready"}</h2>
             <p>
-              Save a MongoDB, PostgreSQL, MySQL, or SQL Server connection, then browse objects or
-              run a query. Ctrl/Cmd+Enter runs the active editor.
+              {connections.length
+                ? "Select a connection, browse a table or collection, or start a new SQL / Mongo tab. Ctrl/Cmd+Enter runs the active editor."
+                : "Save a MongoDB, PostgreSQL, MySQL, or SQL Server connection, then browse objects or run a query. Ctrl/Cmd+Enter runs the active editor."}
             </p>
-            <button className="btn btn-primary" type="button" onClick={() => setDialog("create")} style={{ minWidth: 160 }}>
-              Add a connection
-            </button>
+            {connections.length === 0 ? (
+              <button className="btn btn-primary" type="button" onClick={() => setDialog("create")} style={{ minWidth: 160 }}>
+                Add a connection
+              </button>
+            ) : selected ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() =>
+                  selected.engine === "mongo" ? openMongoTab(selected) : openSqlTab(selected)
+                }
+                style={{ minWidth: 160 }}
+              >
+                New query tab
+              </button>
+            ) : null}
           </div>
         ) : (
           <EditorPane
