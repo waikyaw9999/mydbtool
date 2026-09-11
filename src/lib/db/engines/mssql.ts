@@ -54,7 +54,10 @@ export async function testMssql(conn: ResolvedConnection): Promise<TestResult> {
   };
 }
 
-export async function listMssqlObjects(conn: ResolvedConnection): Promise<SchemaNode[]> {
+export async function listMssqlObjects(
+  conn: ResolvedConnection,
+  focusDatabase?: string,
+): Promise<SchemaNode[]> {
   return withPool(conn, conn.database, async (pool) => {
     let databases: string[] = [];
     try {
@@ -66,48 +69,61 @@ export async function listMssqlObjects(conn: ResolvedConnection): Promise<Schema
       databases = conn.database ? [conn.database] : [];
     }
 
-    const tableRes = await pool.request().query<{
-      TABLE_CATALOG: string;
-      TABLE_SCHEMA: string;
-      TABLE_NAME: string;
-      TABLE_TYPE: string;
-    }>(
-      `SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-       FROM INFORMATION_SCHEMA.TABLES
-       ORDER BY TABLE_SCHEMA, TABLE_NAME`,
-    );
-
-    const nodes = new Map<string, SchemaNode>();
-    for (const name of databases) {
-      nodes.set(name, { kind: "database", name, children: [] });
+    const current = focusDatabase || conn.database;
+    if (current && !databases.includes(current)) {
+      databases = [current, ...databases];
     }
 
-    const current = conn.database || tableRes.recordset[0]?.TABLE_CATALOG;
-    if (current && !nodes.has(current)) {
-      nodes.set(current, { kind: "database", name: current, children: [] });
-    }
+    const nodes: SchemaNode[] = [];
 
-    const schemas = new Map<string, SchemaNode>();
-    for (const row of tableRes.recordset) {
-      const dbName = row.TABLE_CATALOG;
-      let db = nodes.get(dbName);
-      if (!db) {
-        db = { kind: "database", name: dbName, children: [] };
-        nodes.set(dbName, db);
+    for (const dbName of databases) {
+      if (current && dbName !== current) {
+        nodes.push({ kind: "database", name: dbName, children: [] });
+        continue;
       }
-      const key = `${dbName}.${row.TABLE_SCHEMA}`;
-      let schema = schemas.get(key);
-      if (!schema) {
-        schema = { kind: "schema", name: row.TABLE_SCHEMA, children: [] };
-        schemas.set(key, schema);
-        db.children?.push(schema);
+
+      const tablePool =
+        dbName === (conn.database || dbName)
+          ? pool
+          : new sql.ConnectionPool(configFor(conn, dbName));
+      const openedExtra = tablePool !== pool;
+      if (openedExtra) await tablePool.connect();
+      try {
+        const tableRes = await tablePool.request().query<{
+          TABLE_SCHEMA: string;
+          TABLE_NAME: string;
+          TABLE_TYPE: string;
+        }>(
+          `SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
+           FROM INFORMATION_SCHEMA.TABLES
+           ORDER BY TABLE_SCHEMA, TABLE_NAME`,
+        );
+        const schemas = new Map<string, SchemaNode>();
+        for (const row of tableRes.recordset) {
+          let schema = schemas.get(row.TABLE_SCHEMA);
+          if (!schema) {
+            schema = { kind: "schema", name: row.TABLE_SCHEMA, children: [] };
+            schemas.set(row.TABLE_SCHEMA, schema);
+          }
+          schema.children?.push({
+            kind: row.TABLE_TYPE === "VIEW" ? "view" : "table",
+            name: row.TABLE_NAME,
+          });
+        }
+        nodes.push({
+          kind: "database",
+          name: dbName,
+          children: [...schemas.values()],
+        });
+      } finally {
+        if (openedExtra) await tablePool.close().catch(() => undefined);
       }
-      schema.children?.push({
-        kind: row.TABLE_TYPE === "VIEW" ? "view" : "table",
-        name: row.TABLE_NAME,
-      });
     }
-    return [...nodes.values()];
+
+    if (nodes.length === 0 && current) {
+      nodes.push({ kind: "database", name: current, children: [] });
+    }
+    return nodes;
   });
 }
 
@@ -191,9 +207,10 @@ export async function queryMssql(
   conn: ResolvedConnection,
   sqlText: string,
   limit: number,
+  database = conn.database,
 ): Promise<QueryResult> {
   const take = clampLimit(limit);
-  return withPool(conn, conn.database, async (pool) => {
+  return withPool(conn, database, async (pool) => {
     const started = Date.now();
     const res = await pool.request().query(sqlText);
     const records = (res.recordset ?? []) as Array<Record<string, unknown>>;

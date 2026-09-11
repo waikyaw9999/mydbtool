@@ -9,6 +9,7 @@ import { ResultGrid } from "@/components/ResultGrid";
 import { api } from "@/lib/client/api";
 import { ENGINE_LABELS, type PublicConnection } from "@/lib/connections/types";
 import { DEFAULT_RESULT_LIMIT } from "@/lib/db/query-safety";
+import { listSqlDatabases } from "@/lib/db/sql-database";
 import type { PreviewTarget, QueryResult, QueryResponse, SchemaNode } from "@/lib/db/types";
 
 type SqlTab = {
@@ -16,6 +17,7 @@ type SqlTab = {
   kind: "sql";
   title: string;
   connectionId: string;
+  database: string;
   sql: string;
   result: QueryResult | null;
   error: string | null;
@@ -77,9 +79,28 @@ export function Workspace() {
     action: () => void;
   }>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sqlDatabaseByConn, setSqlDatabaseByConn] = useState<Record<string, string>>({});
 
   const selected = connections.find((item) => item.id === selectedId) ?? null;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const selectedSqlDatabase = selected
+    ? sqlDatabaseByConn[selected.id] || selected.database
+    : "";
+
+  function setConnectionSqlDatabase(connectionId: string, database: string) {
+    const next = database.trim();
+    if (!next) return;
+    setSqlDatabaseByConn((prev) =>
+      prev[connectionId] === next ? prev : { ...prev, [connectionId]: next },
+    );
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.kind === "sql" && tab.connectionId === connectionId && tab.database !== next
+          ? { ...tab, database: next }
+          : tab,
+      ),
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +145,9 @@ export function Workspace() {
   async function selectConnection(conn: PublicConnection) {
     setSelectedId(conn.id);
     setTree(null);
+    setSqlDatabaseByConn((prev) =>
+      prev[conn.id] || !conn.database ? prev : { ...prev, [conn.id]: conn.database },
+    );
     await loadTree(conn.id);
   }
 
@@ -132,11 +156,13 @@ export function Workspace() {
   }
 
   function openSqlTab(conn: PublicConnection, sql = "SELECT 1;") {
+    const database = sqlDatabaseByConn[conn.id] || conn.database;
     const tab: SqlTab = {
       id: uid(),
       kind: "sql",
       title: `SQL · ${conn.name}`,
       connectionId: conn.id,
+      database,
       sql,
       result: null,
       error: null,
@@ -217,6 +243,7 @@ export function Workspace() {
         method: "POST",
         body: JSON.stringify({
           sql: tab.sql,
+          database: tab.database || undefined,
           limit: DEFAULT_RESULT_LIMIT,
           confirmDestructive,
         }),
@@ -325,6 +352,11 @@ export function Workspace() {
           setSelectedId(null);
           setTree(null);
         }
+        setSqlDatabaseByConn((prev) => {
+          const next = { ...prev };
+          delete next[conn.id];
+          return next;
+        });
         setTabs((prev) => prev.filter((tab) => tab.connectionId !== conn.id));
       },
     });
@@ -336,9 +368,12 @@ export function Workspace() {
     if (activeTab?.result) {
       return `${activeTab.result.rows.length} rows in ${activeTab.result.durationMs} ms`;
     }
-    if (selected) return `${ENGINE_LABELS[selected.engine]} · ${selected.host}:${selected.port}`;
+    if (selected) {
+      const db = sqlDatabaseByConn[selected.id] || selected.database;
+      return `${ENGINE_LABELS[selected.engine]} · ${selected.host}:${selected.port}${db ? ` / ${db}` : ""}`;
+    }
     return "Ready";
-  }, [activeTab, selected]);
+  }, [activeTab, selected, sqlDatabaseByConn]);
 
   return (
     <div className="app-shell">
@@ -428,8 +463,14 @@ export function Workspace() {
           ) : tree ? (
             <ObjectTree
               nodes={tree}
-              onExpandDatabase={(name) => void loadTree(selected.id, name)}
+              activeDatabase={selectedSqlDatabase}
+              onSelectDatabase={(name) => setConnectionSqlDatabase(selected.id, name)}
+              onExpandDatabase={(name) => {
+                setConnectionSqlDatabase(selected.id, name);
+                void loadTree(selected.id, name);
+              }}
               onOpen={(path) => {
+                if (path.database) setConnectionSqlDatabase(selected.id, path.database);
                 if (path.kind === "collection") {
                   void openPreview(
                     selected,
@@ -522,8 +563,19 @@ export function Workspace() {
           <EditorPane
             tab={activeTab}
             connection={connections.find((item) => item.id === activeTab.connectionId) ?? null}
+            databases={
+              activeTab.kind === "sql"
+                ? listSqlDatabases({
+                    connectionDatabase:
+                      connections.find((item) => item.id === activeTab.connectionId)?.database,
+                    activeDatabase: activeTab.database,
+                    tree: selectedId === activeTab.connectionId ? tree : null,
+                  })
+                : []
+            }
             onChange={patchTab}
             onRunSql={(tab) => void runSql(tab)}
+            onSqlDatabaseChange={(tab, database) => setConnectionSqlDatabase(tab.connectionId, database)}
             onRunMongo={(tab) => void runMongo(tab)}
             onLoadMorePreview={(tab) => void loadMorePreview(tab)}
             onLoadMoreMongo={(tab) => void runMongo(tab, tab.offset + DEFAULT_RESULT_LIMIT, true)}
@@ -547,6 +599,9 @@ export function Workspace() {
               return [...others, conn].sort((a, b) => a.name.localeCompare(b.name));
             });
             setSelectedId(conn.id);
+            setSqlDatabaseByConn((prev) =>
+              prev[conn.id] || !conn.database ? prev : { ...prev, [conn.id]: conn.database },
+            );
             void loadTree(conn.id);
           }}
         />
@@ -569,29 +624,58 @@ export function Workspace() {
 function EditorPane({
   tab,
   connection,
+  databases,
   onChange,
   onRunSql,
+  onSqlDatabaseChange,
   onRunMongo,
   onLoadMorePreview,
   onLoadMoreMongo,
 }: {
   tab: Tab;
   connection: PublicConnection | null;
+  databases: string[];
   onChange: (id: string, patch: Partial<Tab>) => void;
   onRunSql: (tab: SqlTab) => void;
+  onSqlDatabaseChange: (tab: SqlTab, database: string) => void;
   onRunMongo: (tab: MongoTab) => void;
   onLoadMorePreview: (tab: PreviewTab) => void;
   onLoadMoreMongo: (tab: MongoTab) => void;
 }) {
+  const sqlTarget =
+    tab.kind === "sql"
+      ? `${connection?.host ?? "SQL"}${connection ? `:${connection.port}` : ""} · ${tab.database || connection?.database || "database"}`
+      : "";
+
   return (
     <div className="editor-pane">
       <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
         {tab.kind === "sql" ? (
           <>
             <div className="editor-toolbar">
-              <span style={{ color: "var(--muted)" }}>
-                {connection ? `${connection.name} · SQL` : "SQL"} · Ctrl/Cmd+Enter to run
-              </span>
+              <div className="editor-db">
+                <span className="editor-db-host">
+                  {connection ? `${connection.host}:${connection.port}` : "SQL"}
+                </span>
+                <span aria-hidden="true">·</span>
+                {tab.kind === "sql" && databases.length > 1 ? (
+                  <select
+                    className="select"
+                    aria-label="Database"
+                    value={tab.database}
+                    onChange={(e) => onSqlDatabaseChange(tab, e.target.value)}
+                  >
+                    {databases.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span title={sqlTarget}>{tab.database || connection?.database || "database"}</span>
+                )}
+                <span style={{ color: "var(--faint)" }}>Ctrl/Cmd+Enter to run</span>
+              </div>
               <button className="btn btn-primary" type="button" disabled={tab.running} onClick={() => onRunSql(tab)}>
                 {tab.running ? "Running…" : "Run"}
               </button>
@@ -666,8 +750,10 @@ function EditorPane({
         {tab.kind === "preview" ? (
           <div className="editor-toolbar">
             <span style={{ color: "var(--muted)" }}>
-              Preview {tab.target.collection || tab.target.table}
-              {tab.target.schema ? `.${tab.target.schema}` : ""}
+              Preview{" "}
+              {[tab.target.database, tab.target.schema, tab.target.collection || tab.target.table]
+                .filter(Boolean)
+                .join(".")}
             </span>
             <span className="chip">first {tab.limit} rows</span>
           </div>

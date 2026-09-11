@@ -52,6 +52,8 @@ export type MongoQueryBody = {
 
 export type QueryRequest = {
   sql?: string;
+  /** SQL catalog to open for this statement; defaults to the saved connection database. */
+  database?: string;
   mongo?: MongoQueryBody;
   limit?: number;
   offset?: number;

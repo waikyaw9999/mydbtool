@@ -225,8 +225,12 @@ button {
   background: var(--bg-hover);
 }
 
-.tree-node.leaf:hover {
-  background: var(--bg-active);
+.tree-node.current {
+  background: var(--accent-dim);
+}
+
+.tree-node.current:hover {
+  background: var(--accent-dim);
 }
 
 .main {
@@ -282,6 +286,33 @@ button {
   gap: 8px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
+  flex-wrap: nowrap;
+}
+
+.editor-toolbar .btn {
+  flex-shrink: 0;
+}
+
+.editor-db {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+}
+
+.editor-db-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-db .select {
+  width: auto;
+  min-width: 112px;
+  max-width: 220px;
+  padding: 4px 8px;
 }
 
 .code-area,

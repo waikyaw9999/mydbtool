@@ -7,6 +7,7 @@ import {
   clampOffset,
 } from "@/lib/db/query-safety";
 import { jsonError, jsonOk, readJson } from "@/lib/api";
+import { resolveQueryDatabase } from "@/lib/db/sql-database";
 import type { QueryRequest, QueryResponse } from "@/lib/db/types";
 
 export const runtime = "nodejs";
@@ -40,7 +41,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         },
       });
     }
-    const result = await runSql(conn, sql, limit);
+    const database = resolveQueryDatabase(conn.database, body.database);
+    const result = await runSql(conn, sql, limit, database);
     return jsonOk({ result });
   } catch (err) {
     return jsonError(err, 400);

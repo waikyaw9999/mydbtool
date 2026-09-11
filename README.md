@@ -67,7 +67,7 @@ Then create connections against `localhost` with:
 1. Save a connection and optionally **Test connection**.
 2. Select it in the sidebar to load the object tree (databases / schemas / tables, or databases / collections).
 3. Click a table or collection to preview the first 100 rows (load more if truncated). Column/field types appear when the engine provides them.
-4. Open a query tab. SQL uses the editor + **Run** or **Ctrl/Cmd+Enter**. Mongo accepts a JSON find filter or an aggregation pipeline.
+4. Open a query tab. SQL uses the editor + **Run** or **Ctrl/Cmd+Enter**. Statements run against the **active database** shown in the toolbar (`host · database`), defaulting to the saved connection database. Expanding another database in the object tree, opening a table preview, or using the toolbar selector (when several catalogs are listed) points SQL at that catalog so unqualified names match the tables you are browsing. Mongo already sends an explicit database on the find/aggregate tab.
 5. Results show in a grid (and JSON for Mongo/preview). Row counts are capped (default 100, max 500).
 
 ## Architecture

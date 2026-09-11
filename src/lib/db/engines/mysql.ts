@@ -7,7 +7,7 @@ import { QUERY_TIMEOUT_MS, TEST_TIMEOUT_MS, clampLimit, clampOffset } from "@/li
 import { rowsFromRecords } from "@/lib/db/serialize";
 import type { ColumnMeta, PreviewTarget, QueryResult, SchemaNode, TestResult } from "@/lib/db/types";
 
-function configFor(conn: ResolvedConnection): ConnectionOptions {
+function configFor(conn: ResolvedConnection, database = conn.database): ConnectionOptions {
   const options = parseOptions(conn.options);
   const rejectUnauthorized = optionFlag(options, "rejectUnauthorized");
   return {
@@ -15,7 +15,7 @@ function configFor(conn: ResolvedConnection): ConnectionOptions {
     port: conn.port,
     user: conn.username || undefined,
     password: conn.password || undefined,
-    database: conn.database || undefined,
+    database: database || undefined,
     connectTimeout: TEST_TIMEOUT_MS,
     ssl: conn.ssl ? { rejectUnauthorized: rejectUnauthorized ?? false } : undefined,
     multipleStatements: false,
@@ -25,8 +25,9 @@ function configFor(conn: ResolvedConnection): ConnectionOptions {
 async function withConn<T>(
   conn: ResolvedConnection,
   fn: (client: Connection) => Promise<T>,
+  database?: string,
 ): Promise<T> {
-  const client = await mysql.createConnection(configFor(conn));
+  const client = await mysql.createConnection(configFor(conn, database || conn.database));
   try {
     if (conn.readOnly) {
       await client.query("SET SESSION TRANSACTION READ ONLY");
@@ -147,38 +148,43 @@ export async function queryMysql(
   conn: ResolvedConnection,
   sql: string,
   limit: number,
+  database = conn.database,
 ): Promise<QueryResult> {
   const take = clampLimit(limit);
-  return withConn(conn, async (client) => {
-    const started = Date.now();
-    const [raw, fields] = await client.query(sql);
-    const durationMs = Date.now() - started;
-    if (Array.isArray(raw)) {
-      const records = raw as Array<Record<string, unknown>>;
-      const truncated = records.length > take;
-      const sliced = truncated ? records.slice(0, take) : records;
-      const { columns, rows } = rowsFromRecords(
-        sliced,
-        Array.isArray(fields) ? fields.map((field) => field.name) : [],
-      );
+  return withConn(
+    conn,
+    async (client) => {
+      const started = Date.now();
+      const [raw, fields] = await client.query(sql);
+      const durationMs = Date.now() - started;
+      if (Array.isArray(raw)) {
+        const records = raw as Array<Record<string, unknown>>;
+        const truncated = records.length > take;
+        const sliced = truncated ? records.slice(0, take) : records;
+        const { columns, rows } = rowsFromRecords(
+          sliced,
+          Array.isArray(fields) ? fields.map((field) => field.name) : [],
+        );
+        return {
+          columns,
+          rows,
+          rowCount: records.length,
+          truncated,
+          durationMs,
+          command: "SELECT",
+        };
+      }
+      const header = raw as { affectedRows?: number };
       return {
-        columns,
-        rows,
-        rowCount: records.length,
-        truncated,
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        truncated: false,
         durationMs,
-        command: "SELECT",
+        command: "OK",
+        affectedRows: header.affectedRows,
       };
-    }
-    const header = raw as { affectedRows?: number };
-    return {
-      columns: [],
-      rows: [],
-      rowCount: 0,
-      truncated: false,
-      durationMs,
-      command: "OK",
-      affectedRows: header.affectedRows,
-    };
-  });
+    },
+    database,
+  );
 }
