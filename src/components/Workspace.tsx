@@ -367,7 +367,7 @@ export function Workspace() {
             </div>
           ) : (
             connections.map((conn) => (
-              <div key={conn.id} style={{ display: "flex", gap: 4, alignItems: "stretch" }}>
+              <div key={conn.id} className="conn-row">
                 <button
                   type="button"
                   className={`conn-item ${selectedId === conn.id ? "active" : ""}`}
@@ -385,11 +385,11 @@ export function Workspace() {
                     </div>
                   </div>
                 </button>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 6 }}>
+                <div className="conn-actions">
                   <button
                     className="btn btn-ghost"
                     type="button"
-                    title="Edit"
+                    title="Edit connection"
                     onClick={() => {
                       setSelectedId(conn.id);
                       setDialog("edit");
@@ -400,7 +400,7 @@ export function Workspace() {
                   <button
                     className="btn btn-ghost"
                     type="button"
-                    title="Delete"
+                    title="Delete connection"
                     onClick={() => void removeConnection(conn)}
                   >
                     Del
@@ -500,7 +500,7 @@ export function Workspace() {
               Save a MongoDB, PostgreSQL, MySQL, or SQL Server connection, then browse objects or
               run a query. Ctrl/Cmd+Enter runs the active editor.
             </p>
-            <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
+            <button className="btn btn-primary" type="button" onClick={() => setDialog("create")} style={{ minWidth: 160 }}>
               Add a connection
             </button>
           </div>

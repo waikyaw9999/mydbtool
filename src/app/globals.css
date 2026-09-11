@@ -141,6 +141,24 @@ button {
   gap: 4px;
 }
 
+.conn-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conn-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.conn-actions .btn {
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
 .conn-item {
   width: 100%;
   text-align: left;
@@ -318,6 +336,14 @@ button {
   border-color: transparent;
   color: #081018;
   font-weight: 650;
+  min-width: 72px;
+}
+
+.btn-danger-solid {
+  background: var(--danger);
+  border-color: transparent;
+  color: #1a0a0c;
+  font-weight: 650;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -420,7 +446,7 @@ button {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 11, 0.62);
+  background: rgba(6, 8, 11, 0.78);
   display: grid;
   place-items: center;
   z-index: 40;
