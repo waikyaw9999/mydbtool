@@ -10,7 +10,19 @@ export const MANAGE_ACTIONS = [
   "createCollection",
   "dropCollection",
   "renameCollection",
+  "createDatabase",
+  "dropDatabase",
+  "renameDatabase",
 ] as const;
+
+export const DEFAULT_MONGO_INIT_COLLECTION = "_init";
+
+export const SYSTEM_DATABASES: Record<Engine, readonly string[]> = {
+  postgres: ["postgres", "template0", "template1"],
+  mysql: ["mysql", "information_schema", "performance_schema", "sys"],
+  mssql: ["master", "tempdb", "model", "msdb"],
+  mongo: ["admin", "local", "config"],
+};
 
 export type ManageAction = (typeof MANAGE_ACTIONS)[number];
 
@@ -61,6 +73,8 @@ export type ManageRequest = {
   column?: ColumnInput;
   columnName?: string;
   confirmDestructive?: boolean;
+  /** Must match `database` for dropDatabase. */
+  confirmName?: string;
 };
 
 export function isManageAction(value: unknown): value is ManageAction {
@@ -78,7 +92,76 @@ export function defaultSchemaFor(engine: Engine): string | undefined {
 }
 
 export function isDestructiveManageAction(action: ManageAction): boolean {
-  return action === "dropTable" || action === "dropColumn" || action === "dropCollection";
+  return (
+    action === "dropTable" ||
+    action === "dropColumn" ||
+    action === "dropCollection" ||
+    action === "dropDatabase"
+  );
+}
+
+export function isDatabaseManageAction(action: ManageAction): boolean {
+  return action === "createDatabase" || action === "dropDatabase" || action === "renameDatabase";
+}
+
+export function supportsRenameDatabase(engine: Engine): boolean {
+  return engine === "postgres" || engine === "mssql";
+}
+
+export function isSystemDatabase(engine: Engine, name: string): boolean {
+  const lowered = name.toLowerCase();
+  return SYSTEM_DATABASES[engine].some((item) => item.toLowerCase() === lowered);
+}
+
+export function assertDroppableDatabase(engine: Engine, name: string, connectionDatabase?: string): string {
+  return assertMutableCatalog(engine, name, connectionDatabase, "drop");
+}
+
+export function assertMutableCatalog(
+  engine: Engine,
+  name: string,
+  connectionDatabase: string | undefined,
+  verb: "drop" | "rename",
+): string {
+  assertSafeDatabaseIdent(engine, name);
+  if (isSystemDatabase(engine, name)) {
+    throw new Error(`Cannot ${verb} system database “${name}”.`);
+  }
+  if (engine !== "mongo" && connectionDatabase && connectionDatabase === name) {
+    const hint =
+      engine === "postgres"
+        ? "Edit the connection to open “postgres” (or another catalog), then try again."
+        : engine === "mssql"
+          ? "Edit the connection to open “master” (or another catalog), then try again."
+          : "Edit the connection to open another schema, then try again.";
+    throw new Error(
+      `Cannot ${verb} “${name}” while this connection opens that database. ${hint}`,
+    );
+  }
+  return name;
+}
+
+export function assertSafeDatabaseIdent(engine: Engine, name: string): string {
+  if (engine === "mongo") return assertSafeMongoIdent(name, "database");
+  return assertSafeSqlIdent(name, "database");
+}
+
+/** Catalog used to run CREATE/DROP/RENAME DATABASE so we are not inside the target. */
+export function maintenanceDatabaseFor(
+  engine: Engine,
+  target: string,
+  connectionDatabase?: string,
+): string | undefined {
+  if (engine === "postgres") {
+    return target === "postgres" ? "template1" : "postgres";
+  }
+  if (engine === "mssql") return "master";
+  return connectionDatabase;
+}
+
+function usesMongoIdents(action: ManageAction, engine?: Engine): boolean {
+  if (engine === "mongo") return true;
+  return action.includes("Collection");
 }
 
 export function nativeSqlType(engine: Engine, type: SqlColumnType): string {
@@ -134,7 +217,7 @@ function parseColumn(raw: unknown, index: number): ColumnInput {
   };
 }
 
-export function parseManageRequest(raw: unknown): ManageRequest {
+export function parseManageRequest(raw: unknown, engine?: Engine): ManageRequest {
   const body = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   if (!isManageAction(body.action)) {
     throw new Error("Unknown object action.");
@@ -146,21 +229,23 @@ export function parseManageRequest(raw: unknown): ManageRequest {
   const collection = asString(body.collection) || undefined;
   const newName = asString(body.newName) || undefined;
   const columnName = asString(body.columnName) || undefined;
+  const confirmName = asString(body.confirmName) || undefined;
   const kind = body.kind === "view" ? "view" : "table";
+  const mongoIdents = usesMongoIdents(action, engine);
 
   if (database) {
-    if (action.endsWith("Collection") || action === "createCollection") {
-      assertSafeMongoIdent(database, "database");
-    } else {
-      assertSafeSqlIdent(database, "database");
-    }
+    if (mongoIdents) assertSafeMongoIdent(database, "database");
+    else assertSafeSqlIdent(database, "database");
   }
   if (schema) assertSafeSqlIdent(schema, "schema");
   if (table) assertSafeSqlIdent(table, "table");
   if (collection) assertSafeMongoIdent(collection, "collection");
   if (newName) {
-    if (action === "renameCollection") assertSafeMongoIdent(newName, "new name");
-    else assertSafeSqlIdent(newName, "new name");
+    if (action === "renameCollection" || (action === "renameDatabase" && mongoIdents)) {
+      assertSafeMongoIdent(newName, "new name");
+    } else {
+      assertSafeSqlIdent(newName, "new name");
+    }
   }
   if (columnName) assertSafeSqlIdent(columnName, "column");
 
@@ -193,7 +278,7 @@ export function parseManageRequest(raw: unknown): ManageRequest {
   if (action === "createTable" && !columns?.length) {
     throw new Error("Add at least one column.");
   }
-  if ((action === "renameTable" || action === "renameCollection") && !newName) {
+  if ((action === "renameTable" || action === "renameCollection" || action === "renameDatabase") && !newName) {
     throw new Error("New name is required.");
   }
   if (action === "addColumn" && !column) {
@@ -208,6 +293,14 @@ export function parseManageRequest(raw: unknown): ManageRequest {
   ) {
     throw new Error("Collection name is required.");
   }
+  if (isDatabaseManageAction(action) && !database) {
+    throw new Error("Database name is required.");
+  }
+  if (action === "dropDatabase") {
+    if (!confirmName || confirmName !== database) {
+      throw new Error("Type the database name to confirm drop.");
+    }
+  }
 
   return {
     action,
@@ -221,6 +314,7 @@ export function parseManageRequest(raw: unknown): ManageRequest {
     column,
     columnName,
     confirmDestructive,
+    confirmName,
   };
 }
 
@@ -304,6 +398,30 @@ export function buildDropColumnSql(engine: Engine, req: ManageRequest): string {
     table: req.table,
   });
   return `ALTER TABLE ${qualified} DROP COLUMN ${quoteIdent(engine, req.columnName)}`;
+}
+
+export function buildCreateDatabaseSql(engine: Engine, name: string): string {
+  if (engine === "mongo") throw new Error("MongoDB does not use CREATE DATABASE.");
+  return `CREATE DATABASE ${quoteIdent(engine, name)}`;
+}
+
+export function buildDropDatabaseSql(engine: Engine, name: string): string {
+  if (engine === "mongo") throw new Error("MongoDB does not use DROP DATABASE SQL.");
+  return `DROP DATABASE IF EXISTS ${quoteIdent(engine, name)}`;
+}
+
+export function buildRenameDatabaseSql(engine: Engine, name: string, newName: string): string {
+  if (!supportsRenameDatabase(engine)) {
+    throw new Error(
+      engine === "mysql"
+        ? "MySQL does not support renaming databases."
+        : "This engine does not support renaming databases.",
+    );
+  }
+  if (engine === "postgres") {
+    return `ALTER DATABASE ${quoteIdent(engine, name)} RENAME TO ${quoteIdent(engine, newName)}`;
+  }
+  return `ALTER DATABASE ${quoteIdent(engine, name)} MODIFY NAME = ${quoteIdent(engine, newName)}`;
 }
 
 function mssqlNString(value: string): string {
