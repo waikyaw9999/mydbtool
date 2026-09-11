@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { ObjectTree } from "@/components/ObjectTree";
 import { ResultGrid } from "@/components/ResultGrid";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/client/api";
 import { ENGINE_LABELS, type PublicConnection } from "@/lib/connections/types";
 import { DEFAULT_RESULT_LIMIT } from "@/lib/db/query-safety";
@@ -385,9 +386,12 @@ export function Workspace() {
             <p>Mongo · Postgres · MySQL · SQL Server</p>
           </div>
         </div>
-        <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
-          New connection
-        </button>
+        <div className="header-actions">
+          <ThemeToggle />
+          <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
+            New connection
+          </button>
+        </div>
       </header>
 
       <aside className="sidebar">

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #12151a;
   --bg-elev: #181c22;
   --bg-panel: #1c2128;
@@ -15,6 +17,7 @@
   --accent: #4c8dff;
   --accent-2: #6aa2ff;
   --accent-dim: rgba(76, 141, 255, 0.14);
+  --accent-border: rgba(76, 141, 255, 0.28);
   --ok: #3ecf8e;
   --ok-dim: rgba(62, 207, 142, 0.12);
   --warn: #e3b341;
@@ -27,6 +30,64 @@
   --mongo: #4fd67a;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   --radius: 10px;
+  --header-bg: linear-gradient(180deg, #1a1f26 0%, #15191e 100%);
+  --tabbar-bg: #161a1f;
+  --tab-active-bg: rgba(255, 255, 255, 0.02);
+  --grid-head-bg: #222831;
+  --status-bg: #101318;
+  --overlay: rgba(6, 8, 11, 0.78);
+  --row-alt: rgba(255, 255, 255, 0.015);
+  --row-hover: rgba(76, 141, 255, 0.06);
+  --grid-line: rgba(45, 51, 59, 0.7);
+  --on-accent: #081018;
+  --on-danger: #1a0a0c;
+  --main-glow: rgba(76, 141, 255, 0.08);
+  --brand-inset: rgba(255, 255, 255, 0.08);
+  --chip-bg: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f8;
+  --bg-elev: #ffffff;
+  --bg-panel: #f7f8fb;
+  --bg-input: #ffffff;
+  --bg-hover: #ebeef3;
+  --bg-active: #e3e8f0;
+  --line: #d5dbe3;
+  --line-strong: #c0c8d2;
+  --text: #1a2330;
+  --muted: #4e5a68;
+  --faint: #6b7786;
+  --accent: #2d6be0;
+  --accent-2: #1f58c8;
+  --accent-dim: rgba(45, 107, 224, 0.12);
+  --accent-border: rgba(45, 107, 224, 0.38);
+  --ok: #1b8f5f;
+  --ok-dim: rgba(27, 143, 95, 0.14);
+  --warn: #a87a12;
+  --warn-dim: rgba(168, 122, 18, 0.14);
+  --danger: #d23c45;
+  --danger-dim: rgba(210, 60, 69, 0.14);
+  --postgres: #2f6fa3;
+  --mysql: #1d8a92;
+  --mssql: #c14d44;
+  --mongo: #1e8d4e;
+  --shadow: 0 16px 48px rgba(16, 24, 40, 0.14);
+  --header-bg: linear-gradient(180deg, #ffffff 0%, #f3f5f8 100%);
+  --tabbar-bg: #e9edf2;
+  --tab-active-bg: rgba(45, 107, 224, 0.08);
+  --grid-head-bg: #e7ecf2;
+  --status-bg: #e9edf2;
+  --overlay: rgba(24, 32, 44, 0.48);
+  --row-alt: rgba(16, 24, 40, 0.03);
+  --row-hover: rgba(45, 107, 224, 0.08);
+  --grid-line: rgba(213, 219, 227, 0.95);
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
+  --main-glow: rgba(45, 107, 224, 0.08);
+  --brand-inset: rgba(255, 255, 255, 0.28);
+  --chip-bg: rgba(16, 24, 40, 0.06);
 }
 
 @theme inline {
@@ -38,6 +99,14 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 html,
@@ -80,7 +149,40 @@ button {
   justify-content: space-between;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #1a1f26 0%, #15191e 100%);
+  background: var(--header-bg);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.theme-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.theme-toggle button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.theme-toggle button[aria-pressed="true"] {
+  background: var(--accent-dim);
+  color: var(--text);
 }
 
 .brand {
@@ -95,8 +197,9 @@ button {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #4c8dff, #2f6fe0);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 0 1px var(--brand-inset) inset;
+  color: #fff;
   font-weight: 700;
   font-size: 13px;
 }
@@ -177,7 +280,7 @@ button {
 
 .conn-item.active {
   background: var(--accent-dim);
-  border-color: rgba(76, 141, 255, 0.28);
+  border-color: var(--accent-border);
 }
 
 .conn-meta {
@@ -239,7 +342,7 @@ button {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(1200px 500px at 80% -10%, rgba(76, 141, 255, 0.08), transparent 50%),
+    radial-gradient(1200px 500px at 80% -10%, var(--main-glow), transparent 50%),
     var(--bg);
 }
 
@@ -249,7 +352,7 @@ button {
   gap: 2px;
   padding: 0 8px;
   border-bottom: 1px solid var(--line);
-  background: #161a1f;
+  background: var(--tabbar-bg);
   overflow-x: auto;
   min-height: 38px;
 }
@@ -269,7 +372,7 @@ button {
 .tab.active {
   color: var(--text);
   border-bottom-color: var(--accent);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--tab-active-bg);
 }
 
 .editor-pane {
@@ -377,7 +480,7 @@ button {
 .btn-primary {
   background: var(--accent);
   border-color: transparent;
-  color: #081018;
+  color: var(--on-accent);
   font-weight: 650;
   min-width: 72px;
 }
@@ -385,7 +488,7 @@ button {
 .btn-danger-solid {
   background: var(--danger);
   border-color: transparent;
-  color: #1a0a0c;
+  color: var(--on-danger);
   font-weight: 650;
 }
 
@@ -395,7 +498,7 @@ button {
 
 .btn-danger {
   color: var(--danger);
-  border-color: rgba(240, 113, 120, 0.35);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .btn-ghost {
@@ -413,12 +516,13 @@ button {
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.02em;
+  background: var(--chip-bg);
 }
 
-.chip-postgres { color: var(--postgres); background: rgba(110, 168, 214, 0.12); }
-.chip-mysql { color: var(--mysql); background: rgba(93, 191, 199, 0.12); }
-.chip-mssql { color: var(--mssql); background: rgba(224, 122, 111, 0.12); }
-.chip-mongo { color: var(--mongo); background: rgba(79, 214, 122, 0.12); }
+.chip-postgres { color: var(--postgres); background: color-mix(in srgb, var(--postgres) 16%, transparent); }
+.chip-mysql { color: var(--mysql); background: color-mix(in srgb, var(--mysql) 16%, transparent); }
+.chip-mssql { color: var(--mssql); background: color-mix(in srgb, var(--mssql) 16%, transparent); }
+.chip-mongo { color: var(--mongo); background: color-mix(in srgb, var(--mongo) 16%, transparent); }
 .chip-ok { color: var(--ok); background: var(--ok-dim); }
 .chip-warn { color: var(--warn); background: var(--warn-dim); }
 .chip-danger { color: var(--danger); background: var(--danger-dim); }
@@ -459,7 +563,7 @@ button {
 .data-grid th,
 .data-grid td {
   border-bottom: 1px solid var(--line);
-  border-right: 1px solid rgba(45, 51, 59, 0.7);
+  border-right: 1px solid var(--grid-line);
   padding: 6px 10px;
   text-align: left;
   white-space: nowrap;
@@ -471,7 +575,7 @@ button {
 .data-grid th {
   position: sticky;
   top: 0;
-  background: #222831;
+  background: var(--grid-head-bg);
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
@@ -481,11 +585,11 @@ button {
 }
 
 .data-grid tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--row-alt);
 }
 
 .data-grid tr:hover td {
-  background: rgba(76, 141, 255, 0.06);
+  background: var(--row-hover);
 }
 
 .status {
@@ -495,7 +599,7 @@ button {
   justify-content: space-between;
   padding: 0 12px;
   border-top: 1px solid var(--line);
-  background: #101318;
+  background: var(--status-bg);
   color: var(--muted);
   font-size: 12px;
 }
@@ -503,7 +607,7 @@ button {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 11, 0.78);
+  background: var(--overlay);
   display: grid;
   place-items: center;
   z-index: 40;
