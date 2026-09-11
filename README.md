@@ -60,24 +60,29 @@ Then create connections against `localhost` with:
 - SQL Server: `sa` / `Your_password123`
 - MongoDB: no auth, port `27017`
 
-**Read-only** mode is per connection. SQL writes are rejected; Mongo only allows `find` and `aggregate`. Destructive SQL (`DELETE`, `DROP`, `TRUNCATE`, `ALTER`) also requires an explicit confirm dialog.
+**Read-only** mode is per connection. SQL writes are rejected; Mongo only allows `find` and `aggregate`. Object-tree create/drop/rename actions are also blocked. Destructive SQL in the editor (`DELETE`, `DROP`, `TRUNCATE`, `ALTER`) and GUI drop table/view/collection/column still require an explicit confirm dialog.
 
 ## Using the workbench
 
 1. Save a connection and optionally **Test connection**.
 2. Select it in the sidebar to load the object tree (databases / schemas / tables, or databases / collections).
 3. Click a table or collection to preview the first 100 rows (load more if truncated). Column/field types appear when the engine provides them.
-4. Open a query tab. SQL uses the editor + **Run** or **Ctrl/Cmd+Enter**. Statements run against the **active database** shown in the toolbar (`host · database`), defaulting to the saved connection database. Expanding another database in the object tree, opening a table preview, or using the toolbar selector (when several catalogs are listed) points SQL at that catalog so unqualified names match the tables you are browsing. Mongo already sends an explicit database on the find/aggregate tab.
-5. Results show in a grid (and JSON for Mongo/preview). Row counts are capped (default 100, max 500).
-6. Use **Dark / Light** in the header to switch theme. The choice is saved in `localStorage`. On a first visit, the workbench follows `prefers-color-scheme`.
+4. Manage objects from the tree without writing SQL. Use the **⋮** button or right-click a node, or **New table** / **New collection** in the Objects header:
+   - **SQL** (Postgres, MySQL, SQL Server): create a table (name, schema default `public` / `dbo` / none for MySQL, column list with type / nullable / PK), drop a table or view (danger confirm), rename a table, add or drop a column. The server validates identifiers, builds quoted DDL, and runs it with the existing driver. The tree refreshes on success.
+   - **MongoDB**: create a collection (database + name), drop a collection (danger confirm), rename a collection.
+   - **Read-only** connections disable these actions (menus still explain why). Destructive drops reuse the existing confirm dialog and must send `confirmDestructive` to `POST /api/connections/:id/manage`.
+5. Open a query tab. SQL uses the editor + **Run** or **Ctrl/Cmd+Enter**. Statements run against the **active database** shown in the toolbar (`host · database`), defaulting to the saved connection database. Expanding another database in the object tree, opening a table preview, or using the toolbar selector (when several catalogs are listed) points SQL at that catalog so unqualified names match the tables you are browsing. Mongo already sends an explicit database on the find/aggregate tab.
+6. Results show in a grid (and JSON for Mongo/preview). Row counts are capped (default 100, max 500).
+7. Use **Dark / Light** in the header to switch theme. The choice is saved in `localStorage`. On a first visit, the workbench follows `prefers-color-scheme`. New object dialogs use the same theme tokens.
 
 ## Architecture
 
 ```
 src/
-  app/api/connections/     Node.js route handlers (CRUD, test, objects, preview, query)
+  app/api/connections/     Node.js route handlers (CRUD, test, objects, preview, query, manage)
   lib/connections/         Validation, AES-GCM crypto, JSON file store
   lib/db/engines/          pg, mysql2, mssql (tedious), mongodb drivers
+  lib/db/ddl.ts            Identifier-safe CREATE/DROP/RENAME SQL builders
   lib/db/query-safety.ts   Destructive / read-only helpers
   components/              Client workbench UI
 ```
