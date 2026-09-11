@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ResolvedConnection } from "@/lib/connections/types";
 import { sanitizeError } from "@/lib/db/serialize";
+import { resolveQueryDatabase } from "@/lib/db/sql-database";
 import type {
   ColumnMeta,
   MongoQueryBody,
@@ -70,7 +71,7 @@ export async function listObjects(
     case "mysql":
       return listMysqlObjects(conn);
     case "mssql":
-      return listMssqlObjects(conn);
+      return listMssqlObjects(conn, focusDatabase);
     case "mongo":
       return listMongoObjects(conn);
   }
@@ -98,14 +99,16 @@ export async function runSql(
   conn: ResolvedConnection,
   sql: string,
   limit: number,
+  database?: string,
 ): Promise<QueryResult> {
+  const targetDb = resolveQueryDatabase(conn.database, database);
   switch (conn.engine) {
     case "postgres":
-      return queryPostgres(conn, sql, limit);
+      return queryPostgres(conn, sql, limit, targetDb);
     case "mysql":
-      return queryMysql(conn, sql, limit);
+      return queryMysql(conn, sql, limit, targetDb);
     case "mssql":
-      return queryMssql(conn, sql, limit);
+      return queryMssql(conn, sql, limit, targetDb);
     case "mongo":
       throw new Error("Use a Mongo find or aggregation instead of SQL.");
   }

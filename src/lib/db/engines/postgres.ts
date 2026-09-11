@@ -71,6 +71,9 @@ export async function listPostgresObjects(
     }
 
     const current = focusDatabase || conn.database;
+    if (current && !databases.includes(current)) {
+      databases = [current, ...databases];
+    }
     const nodes: SchemaNode[] = [];
 
     for (const dbName of databases) {
@@ -200,9 +203,10 @@ export async function queryPostgres(
   conn: ResolvedConnection,
   sql: string,
   limit: number,
+  database = conn.database,
 ): Promise<QueryResult> {
   const take = clampLimit(limit);
-  return withClient(conn, conn.database, async (client) => {
+  return withClient(conn, database, async (client) => {
     const started = Date.now();
     const res = await client.query(sql);
     const records = Array.isArray(res.rows)
