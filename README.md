@@ -15,11 +15,64 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The browser workflow is unchanged: you can keep using `npm run dev` / `npm start` if you do not want a desktop window.
+
+## Desktop app (Electron)
+
+The same Next.js workbench can run as a local desktop app. Electron only hosts the window; the Next.js Node server still handles API routes and the database drivers (`pg`, `mysql2`, `mssql`, `mongodb`). A static export is not used.
+
+```bash
+npm install
+npm run electron:dev
+```
+
+That starts Next.js on a loopback port (preferring `127.0.0.1:39100`) and opens a native window titled **mydbtool**. DevTools open in development only.
+
 | Script | Purpose |
 | --- | --- |
-| `npm run dev` | Next.js dev server |
-| `npm run build` | Production build (also used in CI) |
-| `npm start` | Serve the production build |
+| `npm run electron:dev` | Desktop shell + Next.js dev server |
+| `npm run electron:preview` | Desktop shell against a production Next standalone build (`npm run build` first) |
+| `npm run electron:build` | Production Next build + Electron package for the current OS |
+
+Installers land in `release/` (gitignored):
+
+| OS you build on | Typical artifacts |
+| --- | --- |
+| macOS | `.dmg` and `.zip` |
+| Windows | NSIS installer and `.zip` |
+| Linux | `.AppImage` and `.zip` |
+
+Cross-compiling macOS/Windows from Linux is not supported here. Build on each OS (or OS-specific CI runners) for that platform’s installer. Builds are **unsigned**; macOS Gatekeeper / Windows SmartScreen will warn until you add signing certificates (a follow-up). Auto-update is also out of scope.
+
+### Desktop data and secrets
+
+In Electron, saved connections do **not** use `./data/connections.json` from the repo.
+
+| Item | Location |
+| --- | --- |
+| Connection store | `<userData>/connections.json` |
+| Password encryption secret | `<userData>/connections-secret.enc` when OS encryption (`safeStorage`) is available; otherwise `<userData>/connections-secret` (file mode `0600`) |
+
+`userData` is typically:
+
+- macOS: `~/Library/Application Support/mydbtool/`
+- Windows: `%APPDATA%/mydbtool/`
+- Linux: `~/.config/mydbtool/`
+
+On startup the desktop shell generates a per-machine `CONNECTIONS_SECRET` (32 random bytes) if you did not export one, then passes it to the Next.js server. It is never hardcoded in the repository. Changing or deleting that secret file makes previously stored passwords undecryptable (same as changing `CONNECTIONS_SECRET` in browser mode).
+
+To share one store between browser and desktop, export the same `CONNECTIONS_PATH` and `CONNECTIONS_SECRET` in the environment before launching either.
+
+The packaged app bundles a Node.js runtime next to the Next standalone server so production `server.js` and the DB drivers run as Node, not in the renderer. The Next server binds to `127.0.0.1` only.
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Next.js dev server (browser) |
+| `npm run electron:dev` | Desktop app in development |
+| `npm run electron:preview` | Desktop app using `npm run build` output |
+| `npm run electron:build` | Package installers for the current OS |
+| `npm run build` | Production web/standalone build (also used in CI) |
+| `npm start` | Serve the production build in a browser |
 | `npm test` | Unit tests (validation + query safety) |
 | `npm run lint` | ESLint |
 
@@ -29,8 +82,8 @@ No live database is required to start the UI, save connections, or validate the 
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `CONNECTIONS_SECRET` | Recommended | Passphrase used to derive an AES-256-GCM key for encrypting saved passwords. If unset or shorter than 8 characters, a **development-only** default is used and a warning is logged. Changing this value makes previously stored passwords undecryptable. |
-| `CONNECTIONS_PATH` | Optional | File path for the connection store. Defaults to `./data/connections.json`. |
+| `CONNECTIONS_SECRET` | Recommended | Passphrase used to derive an AES-256-GCM key for encrypting saved passwords. If unset or shorter than 8 characters, a **development-only** default is used and a warning is logged (browser mode). The Electron app generates a per-machine secret under `userData` instead. Changing this value makes previously stored passwords undecryptable. |
+| `CONNECTIONS_PATH` | Optional | File path for the connection store. Defaults to `./data/connections.json` in browser mode, or `<userData>/connections.json` in Electron. |
 
 Passwords never leave the server after save. List/get APIs return `hasPassword`, not the secret. Connection strings are not sent to the browser.
 
@@ -64,8 +117,6 @@ Then create connections against `localhost` with:
 
 ## Using the workbench
 
-## Using the workbench
-
 1. Save a connection and optionally **Test connection**.
 2. Select it in the sidebar to load the object tree (databases / schemas / tables, or databases / collections).
 3. Click a table or collection to preview the first 100 rows (load more if truncated). Column/field types appear when the engine provides them.
@@ -81,6 +132,8 @@ Then create connections against `localhost` with:
 ## Architecture
 
 ```
+electron/                   Desktop shell (main, preload, splash)
+scripts/                    Electron compile + Next standalone packaging
 src/
   app/api/connections/     Node.js route handlers (CRUD, test, objects, preview, query, manage)
   lib/connections/         Validation, AES-GCM crypto, JSON file store
@@ -91,13 +144,14 @@ src/
 ```
 
 - Next.js App Router + React. All driver I/O runs in server route handlers (`runtime = "nodejs"`).
+- The Electron shell loads that server at `http://127.0.0.1` (dev server or production `output: "standalone"`). The renderer has `contextIsolation` and no `nodeIntegration`.
 - Saved connections live in a local JSON file. Passwords are encrypted with `CONNECTIONS_SECRET`.
 - Each request opens a short-lived driver connection and closes it. There is no arbitrary shell or filesystem access beyond that store file.
 - SSH tunnels are not supported (future work).
 
 ## Safety notes
 
-Treat this as a **local / trusted-network** tool. Anyone who can reach the app can use saved connections. Do not expose it to the public internet without additional authentication in front.
+Treat this as a **local / trusted-network** tool. Anyone who can reach the app can use saved connections. Do not expose it to the public internet without additional authentication in front. The desktop build binds the Next.js server to `127.0.0.1` only.
 
 ## License
 
