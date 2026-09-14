@@ -4,6 +4,19 @@ A desktop-feel web workbench for engineers to manage **MongoDB**, **PostgreSQL**
 
 This is a practical MVP inspired by DBeaver — not a full clone. SSH tunnels, ER diagrams, import/export wizards, and multi-user cloud sync are out of scope.
 
+## About
+
+**mydbtool** is created and owned by **DerickWai (WMK)**.
+
+**Built with love by DerickWai (WMK) and Grok Bot**
+
+| | |
+| --- | --- |
+| **DerickWai (WMK)** | Author and owner |
+| **Grok Bot** | Collaborator / assistant |
+
+The workbench header and status bar show the same credit.
+
 ## Run locally
 
 ```bash
@@ -155,4 +168,4 @@ Treat this as a **local / trusted-network** tool. Anyone who can reach the app c
 
 ## License
 
-Private / unlicensed unless the repository owner adds one.
+Private / unlicensed. **DerickWai (WMK)** owns this project unless a license is added.

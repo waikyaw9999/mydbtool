@@ -1,6 +1,6 @@
 appId: com.github.waikyaw9999.mydbtool
 productName: mydbtool
-copyright: Copyright © mydbtool contributors
+copyright: Built with love by DerickWai (WMK) and Grok Bot
 asar: true
 npmRebuild: false
 nodeGypRebuild: false

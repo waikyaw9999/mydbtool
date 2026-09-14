@@ -14,6 +14,7 @@ import http from "node:http";
 import { createServer } from "node:net";
 import path from "node:path";
 
+const CREDIT = "Built with love by DerickWai (WMK) and Grok Bot";
 const isDev = process.env.MYDBTOOL_DEV === "1";
 const PREFERRED_PORT = 39100;
 
@@ -286,6 +287,21 @@ function installMenu(): void {
     {
       role: "help",
       submenu: [
+        ...(!isMac
+          ? [
+              {
+                label: "About mydbtool",
+                click: () => {
+                  void dialog.showMessageBox({
+                    type: "info",
+                    title: "About mydbtool",
+                    message: "mydbtool",
+                    detail: CREDIT,
+                  });
+                },
+              },
+            ]
+          : []),
         {
           label: "mydbtool on GitHub",
           click: () => {
@@ -376,6 +392,10 @@ if (!gotLock) {
   });
 
   app.setName("mydbtool");
+  app.setAboutPanelOptions({
+    applicationName: "mydbtool",
+    copyright: CREDIT,
+  });
   if (process.platform === "win32") {
     app.setAppUserModelId("com.github.waikyaw9999.mydbtool");
   }

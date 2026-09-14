@@ -5,7 +5,7 @@
   "main": "electron/dist/main.js",
   "description": "A desktop workbench for MongoDB, PostgreSQL, MySQL, and SQL Server",
   "homepage": "https://github.com/waikyaw9999/mydbtool",
-  "author": "mydbtool",
+  "author": "DerickWai (WMK)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
