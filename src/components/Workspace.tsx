@@ -9,6 +9,7 @@ import { ObjectTree, type ObjectMenuAction, type TreePath } from "@/components/O
 import { ResultGrid } from "@/components/ResultGrid";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/lib/client/api";
+import { PRODUCT_CREDIT } from "@/lib/client/credits";
 import { ENGINE_LABELS, type PublicConnection } from "@/lib/connections/types";
 import { defaultSchemaFor, type ManageRequest } from "@/lib/db/ddl";
 import { DEFAULT_RESULT_LIMIT } from "@/lib/db/query-safety";
@@ -647,6 +648,9 @@ export function Workspace() {
             <p>Mongo · Postgres · MySQL · SQL Server</p>
           </div>
         </div>
+        <p className="header-credit" title={PRODUCT_CREDIT}>
+          {PRODUCT_CREDIT}
+        </p>
         <div className="header-actions">
           <ThemeToggle />
           <button className="btn btn-primary" type="button" onClick={() => setDialog("create")}>
@@ -871,6 +875,9 @@ export function Workspace() {
 
       <footer className="status">
         <span>{status}</span>
+        <span className="status-credit" title={PRODUCT_CREDIT}>
+          {PRODUCT_CREDIT}
+        </span>
         <span>{selected?.readOnly ? "Read-only connection" : "Local encrypted connection store"}</span>
       </footer>
 

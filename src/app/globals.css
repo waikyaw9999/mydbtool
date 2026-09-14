@@ -146,10 +146,24 @@ button {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
   background: var(--header-bg);
+}
+
+.header-credit {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .header-actions {
@@ -677,11 +691,23 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 0 12px;
   border-top: 1px solid var(--line);
   background: var(--status-bg);
   color: var(--muted);
   font-size: 12px;
+}
+
+.status-credit {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .overlay {
