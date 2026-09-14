@@ -2,13 +2,21 @@
   "name": "mydbtool",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/dist/main.js",
+  "description": "A desktop workbench for MongoDB, PostgreSQL, MySQL, and SQL Server",
+  "homepage": "https://github.com/waikyaw9999/mydbtool",
+  "author": "mydbtool",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
+    "electron:build:main": "node scripts/build-electron.mjs",
+    "electron:dev": "node scripts/electron-dev.mjs",
+    "electron:preview": "node scripts/electron-preview.mjs",
+    "electron:build": "npm run build && npm run electron:build:main && node scripts/prepare-standalone.mjs --with-node && electron-builder --publish never"
   },
   "dependencies": {
     "mongodb": "^7.6.0",
@@ -27,6 +35,9 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
