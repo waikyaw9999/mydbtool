@@ -4,6 +4,7 @@ copyright: Copyright © mydbtool contributors
 asar: true
 npmRebuild: false
 nodeGypRebuild: false
+afterPack: scripts/after-pack.mjs
 directories:
   output: release
 files:

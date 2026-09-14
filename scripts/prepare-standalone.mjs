@@ -38,4 +38,17 @@ if (withNode) {
   console.log(`Bundled Node runtime for the desktop app: ${dest}`);
 }
 
+const hashedModules = path.join(standalone, ".next", "node_modules");
+if (fs.existsSync(hashedModules)) {
+  for (const name of fs.readdirSync(hashedModules)) {
+    const full = path.join(hashedModules, name);
+    const st = fs.lstatSync(full);
+    if (!st.isSymbolicLink()) continue;
+    const target = path.resolve(path.dirname(full), fs.readlinkSync(full));
+    if (!fs.existsSync(target)) continue;
+    fs.unlinkSync(full);
+    fs.cpSync(target, full, { recursive: true, dereference: true });
+  }
+}
+
 console.log("Prepared Next.js standalone output for Electron.");
